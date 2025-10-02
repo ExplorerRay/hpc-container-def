@@ -1,0 +1,38 @@
+Bootstrap: docker
+From: debian:trixie-slim
+
+%environment
+    # for ignoring some harmless errors
+    export PMIX_MCA_gds=^ds12
+    export PMIX_MCA_psec=^munge
+
+%post
+    apt-get -y update && DEBIAN_FRONTEND=noninteractive apt-get -y install make g++ gcc gfortran wget openmpi-bin libopenmpi-dev libopenblas-dev
+    apt-get clean autoclean && apt-get autoremove --yes && rm -rf /var/lib/apt/lists/*
+
+    cd /opt
+    wget https://www.netlib.org/benchmark/hpl/hpl-2.3.tar.gz
+    tar -xzf hpl-2.3.tar.gz && cd hpl-2.3/setup
+    cp Make.Linux_PII_CBLAS ../Make.linux
+    cd ..
+    sed -i 's|^TOPdir       = $(HOME)/hpl|TOPdir       = /opt/hpl-2.3|' Make.linux
+    sed -i 's|^ARCH         = .*$|ARCH         = linux|' Make.linux
+    sed -i 's|^MPdir        = .*$|MPdir        = /usr/lib/x86_64-linux-gnu/openmpi|' Make.linux
+    sed -i 's|^MPlib        = .*$|MPlib        = $(MPdir)/lib/libmpi.so|' Make.linux
+    sed -i 's|^LAdir        = .*$|LAdir        = /usr/lib/x86_64-linux-gnu/openblas-pthread|' Make.linux
+    sed -i 's|^LAlib        = .*$|LAlib        = $(LAdir)/libopenblas.a|' Make.linux
+    sed -i 's|^CC           = .*$|CC           = /usr/bin/mpicc|' Make.linux
+    sed -i 's|^LINKER       = .*$|LINKER       = /usr/bin/mpicc|' Make.linux
+
+    echo "Building HPL Benchmarks..."
+    make arch=linux
+    rm /opt/hpl-2.3.tar.gz
+    # # for testing
+    # cd /opt/hpl-2.3/bin/linux
+    # mpirun -np 4 xhpl
+
+%runscript
+    cd /opt/hpl-2.3/bin/linux
+    echo "Rank ${SLURM_PROCID} - About to run: ./$*"
+    exec ./$*
+
